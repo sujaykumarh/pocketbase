@@ -9,6 +9,8 @@
 FROM alpine:latest as base
 
 ARG PB_VERSION=0.22.13
+ARG PB_PLATFORM=amd64
+
 WORKDIR /temp
 
 # Install Packages & pull latest binary
@@ -19,8 +21,8 @@ RUN echo "Installing packages...";\
             ca-certificates; \
     \
     echo "Getting pocketbase...";\
-        wget https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip; \
-        unzip pocketbase_${PB_VERSION}_linux_amd64.zip -d pb;
+        wget https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_${PB_PLATFORM}.zip; \
+        unzip pocketbase_${PB_VERSION}_linux_${PB_PLATFORM}.zip -d pb;
 
 # pocketbase binary is now at /temp/pb/pocketbase
 

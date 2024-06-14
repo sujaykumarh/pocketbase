@@ -76,12 +76,15 @@ jobs:
         id: push
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          # TODO Add multi platform support
+          # platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_release.outputs.RELEASE_TAG }}
           build-args: |
             ARG PB_VERSION="${{ steps.get_release.outputs.RELEASE_TAG }}"
+            ARG PB_PLATFORM="linux_amd64"
       
       - name: Attest
         uses: actions/attest-build-provenance@v1
