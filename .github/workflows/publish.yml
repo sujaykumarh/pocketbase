@@ -84,7 +84,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_release.outputs.RELEASE_TAG }}
           build-args: |
             ARG PB_VERSION="${{ steps.get_release.outputs.RELEASE_TAG }}"
-            ARG PB_PLATFORM="linux_amd64"
+            ARG PB_PLATFORM="amd64"
       
       - name: Attest
         uses: actions/attest-build-provenance@v1
