@@ -6,23 +6,27 @@
 # docs      :   https://pocketbase.io/docs
 # refrence  :   https://pocketbase.io/docs/going-to-production/#using-docker
 
-FROM alpine:latest as base
+FROM --platform=$BUILDPLATFORM alpine:latest as base
 
-ARG PB_VERSION=0.22.13
-ARG PB_PLATFORM=amd64
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG PB_VERSION=0.22.14
+# ARG PB_PLATFORM=amd64
 
 WORKDIR /temp
 
 # Install Packages & pull latest binary
-RUN echo "Installing packages...";\
+RUN export PLATFORM=`basename $TARGETPLATFORM`; \
+    \
+    echo "Installing packages...";\
         apk add --no-cache \
             wget \
             unzip \
             ca-certificates; \
     \
     echo "Getting pocketbase...";\
-        wget https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_${PB_PLATFORM}.zip; \
-        unzip pocketbase_${PB_VERSION}_linux_${PB_PLATFORM}.zip -d pb;
+        wget https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_${PLATFORM}.zip; \
+        unzip pocketbase_${PB_VERSION}_linux_${PLATFORM}.zip -d pb;
 
 # pocketbase binary is now at /temp/pb/pocketbase
 
