@@ -6,11 +6,11 @@
 # docs      :   https://pocketbase.io/docs
 # refrence  :   https://pocketbase.io/docs/going-to-production/#using-docker
 
-FROM --platform=$BUILDPLATFORM alpine:latest as base
+FROM --platform=$BUILDPLATFORM alpine:latest AS base
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
-ARG PB_VERSION=0.25.0
+ARG PB_VERSION=0.28.3
 # ARG PB_PLATFORM=amd64
 
 WORKDIR /temp
@@ -35,7 +35,7 @@ RUN export PLATFORM=`basename $TARGETPLATFORM`; \
 ## PocketBase Runtime
 #####
 
-FROM alpine:latest as runtime
+FROM alpine:latest AS runtime
 
 ARG APP_ROOT=/app
 ARG DEFAULT_USER=pocketbase
