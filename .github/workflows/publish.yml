@@ -107,6 +107,7 @@ jobs:
       # Build Docker image & Push
       - name: Build and push image
         uses: docker/build-push-action@v6
+        id: push
         with:
           context: .
           platforms: ${{ steps.set-platform.outputs.buildx_platforms }}
