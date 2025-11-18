@@ -2,95 +2,131 @@ name: "Build & Publish Docker Image"
 
 # trigger events
 on:
-  # Manual
-  workflow_dispatch:
+  # # Manual
+  # workflow_dispatch:
 
-  # automatic
-  push:
-    branches:
-      - 'main'
-    paths:
-      - "Dockerfile"
-      - ".docker/**"
+  # Automatic
+  release:
+    types: [created]
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  CONTAINER_PLATFORM: linux/amd64,linux/arm64
 
 jobs:
 
-  # Generate Docker image
   build-push:
-    name: build-docker-image
-    runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
+    
+    runs-on: ubuntu-latest
     permissions:
       id-token: write
       packages: write
       contents: read
       attestations: write
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
 
     steps:
 
       # Pull Source Code
-      -
-        name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
       # Add support for more platforms with QEMU
       # https://github.com/docker/setup-qemu-action
-      -
-        name: Set up QEMU
+
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       # Set up Docker for Buildx env
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-
-      # Get latest release tag
-      -
-        name: Get latest release tag
-        id: get_release
-        run: |
-          RELEASE_TAG=$(curl -s https://api.github.com/repos/pocketbase/pocketbase/releases/latest | jq -r '.tag_name' | tr -d 'v')
-          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
-          echo "latest release: $RELEASE_TAG"
-
-      # ## Login
-      # - name: 🔐 Login to DockerHub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.dockerHubUsername }}
-      #     password: ${{ secrets.dockerHubPassword }}
-
+      # Login
       - name: 🔐 Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      -
-        name: Build and push
-        uses: docker/build-push-action@v5
-        id: push
+
+      # Determine image tags
+      - name: Determine image tags
+        id: tags
+        run: |
+          # Use the release tag if present, otherwise the release name
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ -z "$TAG" ]; then
+            TAG="$(echo "${{ github.event.release.tag_name }}" | sed -e 's/[^a-zA-Z0-9._-]/_/g')"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          # Add 'latest' for non-prerelease releases
+          if [ "${{ github.event.release.prerelease }}" = "false" ]; then
+            echo "add_latest=true" >> $GITHUB_OUTPUT
+          else
+            echo "add_latest=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Determine docker args
+      - name: Normalize pb platform and version 
+        id: set-platform
+        run: |
+          # prefer explicit single platform from env or default to first platform in list
+          PLAT="${{ env.CONTAINER_PLATFORM }}"
+          # If CI set to multiple, pick platforms for buildx but choose single PB_PLATFORM:
+          # choose 'amd64' if 'linux/amd64' present else 'arm64'
+          if echo "$PLAT" | grep -q 'linux/amd64'; then
+            PB=amd64
+          elif echo "$PLAT" | grep -q 'linux/arm64'; then
+            PB=arm64
+          else
+            # fallback to first entry after trimming
+            PB="$(echo "$PLAT" | cut -d',' -f1 | sed -E 's@.*/@@')"
+          fi
+          # determine PB_VERSION from release tag or tag_name fallback
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ -n "$TAG" ]; then
+            VER="$TAG"
+          else
+            VER="${{ github.event.release.tag_name }}"
+            if [ -z "$VER" ]; then
+              VER="${{ github.event.release.name }}"
+            fi
+          fi
+          # sanitize version (optional)
+          VER_SAFE="$(echo "$VER" | sed -E 's/[^A-Za-z0-9._-]/_/g')"
+          echo "pb_platform=$PB" >> $GITHUB_OUTPUT
+          echo "pb_version=$VER_SAFE" >> $GITHUB_OUTPUT
+          echo "buildx_platforms=${PLAT}" >> $GITHUB_OUTPUT
+
+      # Build Docker image & Push
+      - name: Build and push image
+        uses: docker/build-push-action@v6
         with:
           context: .
-          # TODO Add multi platform support
-          platforms: linux/amd64,linux/arm64
-          # platforms: linux/amd64
+          platforms: ${{ steps.set-platform.outputs.buildx_platforms }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.get_release.outputs.RELEASE_TAG }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          file: ./Dockerfile
           build-args: |
-            ARG PB_VERSION="${{ steps.get_release.outputs.RELEASE_TAG }}"
-            ARG PB_PLATFORM="amd64"
-      
+            PB_PLATFORM=${{ steps.set-platform.outputs.pb_platform }}
+            PB_VERSION=${{ steps.set-platform.outputs.pb_version }}
+
+      # Attest Docker image & Push digest
       - name: Attest
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v3
         id: attest
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-name: ${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+      # Tag Docker image with :latest only if its release
+      - name: Push latest tag (if release)
+        if: steps.tags.outputs.add_latest == 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          docker pull "${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}" || exit 1
+          docker tag "${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}" "${{ env.IMAGE_NAME }}:latest"
+          docker push "${{ env.IMAGE_NAME }}:latest"
