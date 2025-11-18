@@ -125,7 +125,7 @@ jobs:
         uses: actions/attest-build-provenance@v3
         id: attest
         with:
-          subject-name: ${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.tag }}
+          subject-name: ${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
