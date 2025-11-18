@@ -53,12 +53,20 @@ jobs:
       - name: Determine image tags
         id: tags
         run: |
-          # Use the release tag if present, otherwise the release name
+          # Use release tag ref if present, else fallback to release.tag_name or release.name
           TAG="${GITHUB_REF#refs/tags/}"
           if [ -z "$TAG" ]; then
-            TAG="$(echo "${{ github.event.release.tag_name }}" | sed -e 's/[^a-zA-Z0-9._-]/_/g')"
+            TAG="${{ github.event.release.tag_name }}"
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.release.name }}"
+          fi
+          # strip leading v or V (so v1.2.3 -> 1.2.3)
+          TAG="${TAG#v}"
+          TAG="${TAG#V}"
+          # sanitize tag (keep . _ -)
+          TAG_SAFE="$(echo "$TAG" | sed -E 's/[^A-Za-z0-9._-]/_/g')"
+          echo "tag=$TAG_SAFE" >> $GITHUB_OUTPUT
           # Add 'latest' for non-prerelease releases
           if [ "${{ github.event.release.prerelease }}" = "false" ]; then
             echo "add_latest=true" >> $GITHUB_OUTPUT
@@ -70,30 +78,28 @@ jobs:
       - name: Normalize pb platform and version 
         id: set-platform
         run: |
-          # prefer explicit single platform from env or default to first platform in list
           PLAT="${{ env.CONTAINER_PLATFORM }}"
-          # If CI set to multiple, pick platforms for buildx but choose single PB_PLATFORM:
-          # choose 'amd64' if 'linux/amd64' present else 'arm64'
+          # determine PB_PLATFORM: prefer amd64 then arm64, else first entry (strip 'linux/')
           if echo "$PLAT" | grep -q 'linux/amd64'; then
             PB=amd64
           elif echo "$PLAT" | grep -q 'linux/arm64'; then
             PB=arm64
           else
-            # fallback to first entry after trimming
             PB="$(echo "$PLAT" | cut -d',' -f1 | sed -E 's@.*/@@')"
           fi
-          # determine PB_VERSION from release tag or tag_name fallback
+
+          # determine PB_VERSION using same logic as tags step
           TAG="${GITHUB_REF#refs/tags/}"
-          if [ -n "$TAG" ]; then
-            VER="$TAG"
-          else
-            VER="${{ github.event.release.tag_name }}"
-            if [ -z "$VER" ]; then
-              VER="${{ github.event.release.name }}"
-            fi
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.release.tag_name }}"
           fi
-          # sanitize version (optional)
-          VER_SAFE="$(echo "$VER" | sed -E 's/[^A-Za-z0-9._-]/_/g')"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.release.name }}"
+          fi
+          TAG="${TAG#v}"
+          TAG="${TAG#V}"
+          VER_SAFE="$(echo "$TAG" | sed -E 's/[^A-Za-z0-9._-]/_/g')"
+
           echo "pb_platform=$PB" >> $GITHUB_OUTPUT
           echo "pb_version=$VER_SAFE" >> $GITHUB_OUTPUT
           echo "buildx_platforms=${PLAT}" >> $GITHUB_OUTPUT
