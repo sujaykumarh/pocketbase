@@ -10,7 +10,7 @@ This image is based on the official PocketBase project [github.com/pocketbase](h
 
 Check the sample [docker-compose.yml](/sample/docker-compose.yml) file. You can visit `http://localhost:8080/_/` to access pocketbase admin console. 
 
-For initial setup in docker logs you will find setup url similar to ` http://0.0.0.0:80/_/#/pbinstal/<..token..>` replace 80 with your port to get started.
+For initial setup in docker logs you will find setup url similar to ` http://0.0.0.0:80/_/#/pbinstal/<..token..>` replace 80 with your port to get started, or you can use `pocketbase superuser upsert <EMAIL> <PASS>` to setup superuser inside container.
 
 or run directly
 
