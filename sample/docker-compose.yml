@@ -1,5 +1,5 @@
 ####
-## Sample Docker Compose file
+## Sample docker compose file for running   ghcr.io/sujaykumarh/pocketbase   image
 ####
 
 name: pocketbase
